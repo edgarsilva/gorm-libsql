@@ -6,7 +6,7 @@ toolchain go1.21.0
 
 require (
 	github.com/libsql/go-libsql v0.0.0-20231101083310-de118db91aed
-	gorm.io/gorm v1.25.2-0.20230530020048-26663ab9bf55
+	gorm.io/gorm v1.25.5
 )
 
 require (
