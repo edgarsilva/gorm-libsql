@@ -68,24 +68,24 @@ func (d Dialector) Initialize(db *gorm.DB) (err error) {
 			return err
 		}
 
-		defer func() {
-			if closeError := connector.Close(); closeError != nil {
-				fmt.Println("Error closing libsql connector", closeError)
-				if err == nil {
-					err = closeError
-				}
-			}
-		}()
+		// defer func() {
+		// 	if closeError := connector.Close(); closeError != nil {
+		// 		fmt.Println("Error closing libsql connector", closeError)
+		// 		if err == nil {
+		// 			err = closeError
+		// 		}
+		// 	}
+		// }()
 
 		embDB := sql.OpenDB(connector)
-		defer func() {
-			if closeError := embDB.Close(); closeError != nil {
-				fmt.Println("Error closing libsql database", closeError)
-				if err == nil {
-					err = closeError
-				}
-			}
-		}()
+		// defer func() {
+		// 	if closeError := embDB.Close(); closeError != nil {
+		// 		fmt.Println("Error closing libsql database", closeError)
+		// 		if err == nil {
+		// 			err = closeError
+		// 		}
+		// 	}
+		// }()
 
 		go d.Sync()
 
