@@ -3,11 +3,12 @@ package libsql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 
 	"gorm.io/gorm/callbacks"
 
-	_ "github.com/libsql/libsql-client-go/libsql"
+	"github.com/libsql/go-libsql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
@@ -19,32 +20,80 @@ import (
 const DriverName = "libsql"
 
 type Dialector struct {
-	DriverName string
-	DSN        string
+	localPath  string
+	primaryUrl string
+	authToken  string
+	libsqlConn *libsql.Connector
 	Conn       gorm.ConnPool
 }
 
-func Open(dsn string) gorm.Dialector {
-	return &Dialector{DSN: dsn}
+func Open(lPath, priURL, authTok string) gorm.Dialector {
+	return &Dialector{
+		localPath:  lPath,
+		primaryUrl: priURL,
+		authToken:  authTok,
+	}
 }
 
 func (dialector Dialector) Name() string {
 	return "libsql"
 }
 
-func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
-	if dialector.DriverName == "" {
-		dialector.DriverName = DriverName
+func (d Dialector) Sync() error {
+	if err := d.libsqlConn.Sync(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d Dialector) Initialize(db *gorm.DB) (err error) {
+	if d.primaryUrl == "" {
+		return fmt.Errorf("primaryUrl is required, cannot be empty")
 	}
 
-	if dialector.Conn != nil {
-		db.ConnPool = dialector.Conn
+	// dir, err := os.MkdirTemp("", "libsql-*")
+	// if err != nil {
+	// 	return err
+	// }
+
+	// defer os.RemoveAll(dir)
+
+	if d.Conn != nil {
+		db.ConnPool = d.Conn
 	} else {
-		conn, err := sql.Open(dialector.DriverName, dialector.DSN)
+		connector, err := libsql.NewEmbeddedReplicaConnector(d.localPath, d.primaryUrl, d.authToken)
+		d.libsqlConn = connector
+
 		if err != nil {
 			return err
 		}
-		db.ConnPool = conn
+
+		defer func() {
+			if closeError := connector.Close(); closeError != nil {
+				fmt.Println("Error closing libsql connector", closeError)
+				if err == nil {
+					err = closeError
+				}
+			}
+		}()
+
+		embDB := sql.OpenDB(connector)
+		defer func() {
+			if closeError := embDB.Close(); closeError != nil {
+				fmt.Println("Error closing libsql database", closeError)
+				if err == nil {
+					err = closeError
+				}
+			}
+		}()
+
+		go d.Sync()
+
+		if err != nil {
+			return err
+		}
+
+		db.ConnPool = embDB
 	}
 
 	var version string
@@ -65,9 +114,10 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		})
 	}
 
-	for k, v := range dialector.ClauseBuilders() {
+	for k, v := range d.ClauseBuilders() {
 		db.ClauseBuilders[k] = v
 	}
+
 	return
 }
 
